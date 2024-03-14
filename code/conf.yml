@@ -1,0 +1,16 @@
+main:
+  dataset:
+    dataset_path: "/datasets/drone_dataset"
+  model:
+    model_path: "./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
+    device: "cuda"
+    batch_size: 1
+    scene_graph: "complete"
+    symmetrize: true
+
+  global_alignment: 
+    init:  "mst"
+    device: "cuda"
+    schedule: "cosine"
+    niter: 1000 
+    lr: 0.0001
