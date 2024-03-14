@@ -10,9 +10,9 @@ services:
       - DEVICE=cuda
       - MODEL=${MODEL:-DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth}
     volumes:
-      - ../dust3r:/dust3r/
-      - ../code:/code/
-      - ../../../datasets/:/datasets/
+      - ./dust3r:/dust3r/
+      - ./code:/code/
+      - ../../datasets/:/datasets/
     cap_add:
       - IPC_LOCK
       - SYS_RESOURCE
