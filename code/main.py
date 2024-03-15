@@ -9,6 +9,7 @@ import numpy as np
 import trimesh
 from scipy.spatial.transform import Rotation
 from matplotlib import pyplot as pl
+from pyproj import Proj, transform
 
 
 sys.path.append("/dust3r")
@@ -57,6 +58,17 @@ def ___run_global_aligner(output: dict, args: dict) -> dict:
     return scene
 
 
+def __latlon_to_enu(lat, lon, alt, origin_lat, origin_lon, origin_alt):
+    wgs84 = Proj(proj="latlong", datum="WGS84")
+    ecef = Proj(proj="geocent", datum="WGS84")
+    enu = Proj(proj="utm", zone=33, lat_0=origin_lat, lon_0=origin_lon, h_0=origin_alt)
+    # Convert latlon to ECEF
+    x, y, z = transform(wgs84, ecef, lon, lat, alt)
+    # Convert ECEF to ENU
+    x_enu, y_enu, z_enu = transform(ecef, enu, x, y, z)
+    return x_enu, y_enu, z_enu
+
+
 def ___run_on_samples(samples: dict, args: dict):
     trieste_samples = samples["Trieste"]
     model = ___setup_model(args["model"]["model_path"], args["model"]["device"])
@@ -68,7 +80,32 @@ def ___run_on_samples(samples: dict, args: dict):
         # output = ___run_inference(model, images, args)
         # scene = ___run_global_aligner(output, args)
         # matches_im0, matches_im1 = ___get_matches(scene)
-        image_list = [paths[i], paths[i + 1]]
+        origin = metadata[i]["coordinate"]
+        origin_lat, origin_lon, origin_alt = (
+            origin["latitude"],
+            origin["longitude"],
+            150,
+        )
+        print(origin)
+
+        image_list = [paths[i], paths[i + 1], paths[i + 2], paths[i + 3], paths[i + 4]]
+        metadata_list = [
+            metadata[i + 1],
+            metadata[i + 2],
+            metadata[i + 3],
+            metadata[i + 4],
+        ]
+        for meta in metadata_list:
+            lat, lon, alt = (
+                meta["coordinate"]["latitude"],
+                meta["coordinate"]["longitude"],
+                150,
+            )
+            print(__latlon_to_enu(lat, lon, alt, origin_lat, origin_lon, origin_alt))
+
+        print("image_list", image_list)
+        print("metadata_list", metadata_list)
+
         winsize = max(1, (len(image_list) - 1) // 2)
         scene, outfile, imgs = __get_reconstructed_scene(
             args["reconstruct_scene"]["outdir"],

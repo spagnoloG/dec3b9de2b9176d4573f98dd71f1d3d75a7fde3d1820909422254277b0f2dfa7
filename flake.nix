@@ -94,6 +94,7 @@
 
         pythonEnv = customPython.withPackages (ps:
           with ps; [
+            trimesh
             matplotlib
             numpy
             scipy
@@ -102,6 +103,7 @@
             flake8
             black
             open3d
+            pyglet
           ]);
 
       in {

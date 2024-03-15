@@ -53,7 +53,6 @@ class ILoader(torch.utils.data.Dataset):
         return info, number
 
     def _sort_array_by_digit(self, array: list) -> list:
-
         def __get_digit(string: str) -> int:
             return int(string.split("_")[-1].split(".")[0])
 
