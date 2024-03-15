@@ -7,10 +7,24 @@ main:
     batch_size: 1
     scene_graph: "complete"
     symmetrize: true
-
   global_alignment: 
     init:  "mst"
     device: "cuda"
     schedule: "cosine"
     niter: 1000 
     lr: 0.0001
+  reconstruct_scene:
+    outdir: "./results/reconstruction_results"
+    device: "cuda"
+    image_size: 512
+    schedule: "linear" #or cosine
+    niter: 300 # can be increased
+    min_conf_thr: 3.0 # min: 1.0, max: 20.0
+    as_pointcloud: true
+    mask_sky: true
+    clean_depth: true
+    transparent_cams: true
+    cam_size: 0.05
+    scenegraph_type: "complete"
+    refid: 0
+    batch_size: 1

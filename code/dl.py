@@ -1,6 +1,7 @@
 import torch
 from PIL import Image
 import os
+import json
 
 
 class ILoader(torch.utils.data.Dataset):
@@ -20,8 +21,36 @@ class ILoader(torch.utils.data.Dataset):
             "Szombathely",
         ]
         self.images_per_city = {}
+        self.image_metadata_dict = {}
 
         self._set_all_image_paths()
+
+    def _get_metadata(self, path: str) -> None:
+        """
+        Extracts metadata from a JSON file and stores it in the metadata dictionary.
+        """
+        with open(path, newline="") as jsonfile:
+            json_dict = json.load(jsonfile)
+            path = path.split("/")[-1]
+            path = path.replace(".json", "")
+            self.image_metadata_dict[path] = json_dict["cameraFrames"]
+
+    def _extract_info_from_filename(self, filename: str) -> tuple[str, int]:
+        """
+        Extracts information from the filename.
+        """
+        filename_without_ext = filename.replace(".jpeg", "")
+        segments = filename_without_ext.split("/")
+        info = segments[-1]
+        try:
+            number = int(info.split("_")[-1])
+        except ValueError:
+            print("Could not extract number from filename: ", filename)
+            return "", 0
+
+        info = "_".join(info.split("_")[:-1])
+
+        return info, number
 
     def _sort_array_by_digit(self, array: list) -> list:
 
@@ -36,6 +65,8 @@ class ILoader(torch.utils.data.Dataset):
             for file in files:
                 if file.endswith(".jpeg"):
                     self.all_image_paths.append(os.path.join(root, file))
+                elif file.endswith(".json"):
+                    self._get_metadata(os.path.join(root, file))
 
         print(f"Found {len(self.all_image_paths)} images in {self.dataset_dir}")
 
@@ -51,6 +82,15 @@ class ILoader(torch.utils.data.Dataset):
 
         for city in images_per_city:
             images_per_city[city] = self._sort_array_by_digit(images_per_city[city])
+
+        for city in images_per_city:
+            city_images = images_per_city[city]
+            images_with_metadata = []
+            for image in city_images:
+                lookup_str, number = self._extract_info_from_filename(image)
+                metadata = self.image_metadata_dict[lookup_str][number]
+                images_with_metadata.append({"path": image, "metadata": metadata})
+            images_per_city[city] = images_with_metadata
 
         self.images_per_city = images_per_city
 
