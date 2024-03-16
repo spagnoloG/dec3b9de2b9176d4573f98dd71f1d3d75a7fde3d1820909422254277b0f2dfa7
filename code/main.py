@@ -9,7 +9,7 @@ import numpy as np
 import trimesh
 from scipy.spatial.transform import Rotation
 from matplotlib import pyplot as pl
-from pyproj import Proj, transform
+from pyproj import Proj, Transformer
 
 
 sys.path.append("/dust3r")
@@ -58,15 +58,22 @@ def ___run_global_aligner(output: dict, args: dict) -> dict:
     return scene
 
 
-def __latlon_to_enu(lat, lon, alt, origin_lat, origin_lon, origin_alt):
-    wgs84 = Proj(proj="latlong", datum="WGS84")
-    ecef = Proj(proj="geocent", datum="WGS84")
-    enu = Proj(proj="utm", zone=33, lat_0=origin_lat, lon_0=origin_lon, h_0=origin_alt)
-    # Convert latlon to ECEF
-    x, y, z = transform(wgs84, ecef, lon, lat, alt)
-    # Convert ECEF to ENU
-    x_enu, y_enu, z_enu = transform(ecef, enu, x, y, z)
-    return x_enu, y_enu, z_enu
+def __latlon_to_utm(lat, lon):
+    """
+    Convert latitude and longitude to UTM coordinates.
+
+    Returns:
+    - (float, float, str): UTM easting, UTM northing, and UTM zone.
+    """
+    proj_utm = Proj(proj="utm", zone=int((lon + 180) / 6) + 1, datum="WGS84")
+    transformer = Transformer.from_proj(Proj(proj="latlong", datum="WGS84"), proj_utm)
+    easting, northing = transformer.transform(lon, lat)
+
+    zone = int((lon + 180) / 6) + 1
+    hemisphere = "N" if lat >= 0 else "S"
+    utm_zone = f"{zone}{hemisphere}"
+
+    return easting, northing, utm_zone
 
 
 def ___run_on_samples(samples: dict, args: dict):
@@ -88,20 +95,16 @@ def ___run_on_samples(samples: dict, args: dict):
         )
         print(origin)
 
-        image_list = [paths[i], paths[i + 1], paths[i + 2], paths[i + 3], paths[i + 4]]
-        metadata_list = [
-            metadata[i + 1],
-            metadata[i + 2],
-            metadata[i + 3],
-            metadata[i + 4],
-        ]
-        for meta in metadata_list:
-            lat, lon, alt = (
-                meta["coordinate"]["latitude"],
-                meta["coordinate"]["longitude"],
-                150,
-            )
-            print(__latlon_to_enu(lat, lon, alt, origin_lat, origin_lon, origin_alt))
+        image_list = [paths[i], paths[i + 1], paths[i + 2]]
+        metadata_list = [metadata[i], metadata[i + 1], metadata[i + 2]]
+        # utm_coords = []
+        # for meta in metadata_list:
+        #    lat, lon, alt = (
+        #        meta["coordinate"]["latitude"],
+        #        meta["coordinate"]["longitude"],
+        #        150,
+        #    )
+        #    utm_coords.append(__latlon_to_utm(lat, lon))
 
         print("image_list", image_list)
         print("metadata_list", metadata_list)
@@ -161,6 +164,14 @@ def __get_reconstructed_scene(
     elif scenegraph_type == "oneref":
         scenegraph_type = scenegraph_type + "-" + str(refid)
 
+    #
+    # scene_graph:
+    #                   -> complete: each image is connected to all the others and itself
+    #                   -> swin: sliding window of size winsize
+    #                   -> oneref: each image is connected to the first one
+    #
+    # symetrize:
+    #                   -> if True, for each pair (i, j) we add (j, i)
     pairs = make_pairs(
         imgs, scene_graph=scenegraph_type, prefilter=None, symmetrize=True
     )
@@ -175,9 +186,57 @@ def __get_reconstructed_scene(
     lr = 0.01
 
     if mode == GlobalAlignerMode.PointCloudOptimizer:
+        print("running global aligner")
         loss = scene.compute_global_alignment(
             init="mst", niter=niter, schedule=schedule, lr=lr
         )
+
+    # World cooridinate system: : A universal reference frame for all objects and cameras in the scene. It doesn't change with the movement of objects or cameras.
+    # Camera coordinate system: The coordinate system of the camera. It is defined by the camera's intrinsic parameters and the camera's position and orientation in the world coordinate system.
+
+    # Get the intrinsics of the camera
+    # K =| f_x  0  c_x |
+    #    |  0  f_y c_y |
+    #    |  0   0   1  |
+    # -> (f_x, f_y) -> focal length= distance between the camera sensor and lense center
+    # -> (c_x, c_y) -> principal point= the point where the optical axis intersects the image plane
+    print(scene.get_intrinsics())
+    # Get camera c.s. to world c.s. transformation matrices
+    # 4x4 matrices
+    # | R11 R12 R13 Tx |
+    # | R21 R22 R23 Ty |
+    # | R31 R32 R33 Tz |
+    # |  0   0   0   1 |
+    # -> (R11, R12, R13), (R21, R22, R23), (R31, R32, R33) -> rotation matrix
+    # -> (Tx, Ty, Tz) -> translation vector
+    print(scene.get_im_poses())
+
+    camera_cs_to_world_cs = scene.get_im_poses()
+
+    # Get the actual principal points for each camera
+    principal_points = scene.get_principal_points()
+    intrinsic_matrices = scene.get_intrinsics()
+
+    # Iterate over each transformation matrix and corresponding principal point
+    for i, (proj_mtx, intr_mtx) in enumerate(
+        zip(camera_cs_to_world_cs, intrinsic_matrices)
+    ):
+        proj_mtx_cpu = proj_mtx.cpu().detach().numpy()
+        intr_mtx_cpu = intr_mtx.cpu().detach().numpy()
+
+        x, y = principal_points[i].cpu().detach().numpy()
+        camera_point = np.linalg.inv(intr_mtx_cpu) @ np.array([x, y, 1])
+
+        world_point = proj_mtx_cpu @ np.append(camera_point, 1)
+
+        world_point = world_point / world_point[3]
+        print(f"Wold point for camera {i}: {world_point}")
+
+    imgs = scene.imgs
+    for img in imgs:
+        print(img.shape)
+
+    exit()
 
     outfile = __get_3D_model_from_scene(
         outdir,
