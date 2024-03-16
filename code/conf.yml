@@ -1,6 +1,9 @@
 main:
   dataset:
     dataset_path: "/datasets/drone_dataset"
+  run_on_samples:
+    window_size: 5
+    sample_name: "Trieste"
   model:
     model_path: "./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
     device: "cuda"
@@ -28,3 +31,5 @@ main:
     scenegraph_type: "complete"
     refid: 0
     batch_size: 1
+    save_scene: false
+    return_images: false
