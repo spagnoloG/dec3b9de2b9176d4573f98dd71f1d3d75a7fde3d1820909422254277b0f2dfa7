@@ -61,6 +61,8 @@ class ILoader(torch.utils.data.Dataset):
     def _set_all_image_paths(self):
         self.all_image_paths = []
         for root, dirs, files in os.walk(self.dataset_dir):
+            if "Drone2Satellite" in root: # Vicos server specific
+                continue
             for file in files:
                 if file.endswith(".jpeg"):
                     self.all_image_paths.append(os.path.join(root, file))

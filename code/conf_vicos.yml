@@ -1,8 +1,8 @@
 main:
   dataset:
-    dataset_path: "/datasets/drone_dataset"
+    dataset_path: "/storage/datasets/Drone2Sat"
   run_on_samples:
-    window_size: 2
+    window_size: 6
     sample_name: "Trieste"
   model:
     model_path: "./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"

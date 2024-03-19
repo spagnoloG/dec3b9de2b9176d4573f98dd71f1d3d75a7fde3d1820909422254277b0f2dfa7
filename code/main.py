@@ -10,7 +10,8 @@ import trimesh
 from scipy.spatial.transform import Rotation
 from matplotlib import pyplot as pl
 from pyproj import Proj, Transformer
-
+import json
+import time
 
 sys.path.append("/dust3r")
 from dust3r.inference import inference, load_model
@@ -78,18 +79,17 @@ def __latlon_to_utm(lat, lon):
     return easting, northing, utm_zone
 
 
-def ___run_on_samples(samples: dict, args: dict):
+def ___run_on_samples(samples: dict, args: dict) -> dict:
     trieste_samples = samples[args["run_on_samples"]["sample_name"]]
     model = ___setup_model(args["model"]["model_path"], args["model"]["device"])
     paths = [sample["path"] for sample in trieste_samples]
     metadata = [sample["metadata"] for sample in trieste_samples]
     window_size = args["run_on_samples"]["window_size"]
 
+    report = {}
+
     for i in range(0, len(paths) - window_size):
-        # images = ___get_images(paths[i : i + 2], 512)
-        # output = ___run_inference(model, images, args)
-        # scene = ___run_global_aligner(output, args)
-        # matches_im0, matches_im1 = ___get_matches(scene)
+
         image_list = paths[i : i + window_size]
         metadata_list = metadata[i : min(i + window_size + 1, len(paths))]
         origin = metadata[i]["coordinate"]
@@ -121,9 +121,12 @@ def ___run_on_samples(samples: dict, args: dict):
             args["reconstruct_scene"]["save_scene"],
             args["reconstruct_scene"]["return_images"],
         )
+        report[f"scene_{i}"] = {
+                "scene_losses": __get_loss(scene, metadata_list),
+        }
+        pprint(report[f"scene_{i}"])
 
-        print(__get_loss(scene, metadata_list))
-    return None
+    return report 
 
 
 def __get_reconstructed_scene(
@@ -334,7 +337,15 @@ if __name__ == "__main__":
     pprint(args)
 
     dl = ILoader(dataset_dir=args["dataset"]["dataset_path"])
-    ___run_on_samples(dl.images_per_city, args)
+    results = ___run_on_samples(dl.images_per_city, args)
+    results["args"] = args
+
+    curr_time = int(time.time())
+    results_dir = args["reconstruct_scene"]["outdir"]
+    os.makedirs(results_dir, exist_ok=True)
+    with open(f"{results_dir}/results_{curr_time}.json", "w") as f:
+        json.dump(results, f)
+   
 
 # def ___get_matches(scene):
 #    confidence_masks = scene.get_masks()
