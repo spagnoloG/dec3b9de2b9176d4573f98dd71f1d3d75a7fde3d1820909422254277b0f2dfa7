@@ -1,8 +1,97 @@
-def __get_loss(scene, metadata_list: list) -> float:
-    # TODO
-    print(metadata_list)
-    print(scene.get_intrinsics())
-    return 0.0
+import numpy as np
+
+
+def __get_loss(scene, metadata_list: list) -> list:
+    """
+    Loss function to compute the projection error of images taken with the drone camera.
+
+    set of imgs: T = {I1, I2, I3, ..., In}
+    for I in T:
+       check if transition results in the same 3D point
+
+    scene:
+        c1 c2 c3 c4 c5
+        gt1 * scene1 ~ gt2
+        gt2 * scene2 ~ gt3
+        gt3 * scene3 ~ gt4
+        gt4 * scene4 ~ gt5
+        gt5 * scene5 ~ gt6
+
+    WARN: metadata should then consist of [I1, I2, I3, ..., In + 1] where I1 is the first image in the sequence.
+    """
+
+    def setup_gt_rt_matrices(metadata_list: list):
+        gt_rt_matrices = []
+        for metadata in metadata_list:
+            position = metadata["position"]
+            rotation = metadata["rotation"]
+            tx, ty, tz = position["x"], position["y"], position["z"]
+            rot_x, rot_y, rot_z = rotation["x"], rotation["y"], rotation["z"]
+            T = setup_translation_vector(tx, ty, tz)
+            R = setup_rotation_mtx(rot_x, rot_y, rot_z)
+            gt_rt_matrices.append(np.hstack((R, T)))
+        return gt_rt_matrices
+
+    scene_rt_matrices = scene.get_im_poses()
+    gt_rt_matrices = setup_gt_rt_matrices(metadata_list)
+
+    # Compute the projection error
+    projection_erros = []
+    for i in range(len(scene_rt_matrices)):
+        scene_rt = scene_rt_matrices[i].cpu().detach().numpy()
+        gt_rt = gt_rt_matrices[i]
+        expected_rt = gt_rt_matrices[i + 1]
+        projected_rt = gt_rt @ scene_rt
+        projection_erros.append(np.linalg.norm(expected_rt - projected_rt))
+
+    return projection_erros
+
+
+def setup_translation_vector(tx: float, ty: float, tz: float):
+    # T = | Tx |
+    #     | Ty |
+    #     | Tz |
+    T = np.array([[tx], [ty], [tz]])
+    return T
+
+
+def setup_rotation_mtx(rot_x: float, rot_y: float, rot_z: float):
+    # R_x = | 1  0       0      |
+    #       | 0  cos(x) -sin(x) |
+    #       | 0  sin(x)  cos(x) |
+    R_x = np.array(
+        [
+            [1, 0, 0],
+            [0, np.cos(rot_x), -np.sin(rot_x)],
+            [0, np.sin(rot_x), np.cos(rot_x)],
+        ]
+    )
+
+    # R_y = |  cos(y)  0  sin(y) |
+    #       |  0       1  0      |
+    #       | -sin(y)  0  cos(y) |
+    R_y = np.array(
+        [
+            [np.cos(rot_y), 0, np.sin(rot_y)],
+            [0, 1, 0],
+            [-np.sin(rot_y), 0, np.cos(rot_y)],
+        ]
+    )
+
+    # R_z = | cos(z) -sin(z)  0 |
+    #       | sin(z)  cos(z)  0 |
+    #       | 0       0       1 |
+    R_z = np.array(
+        [
+            [np.cos(rot_z), -np.sin(rot_z), 0],
+            [np.sin(rot_z), np.cos(rot_z), 0],
+            [0, 0, 1],
+        ]
+    )
+
+    # Combine the rotation matrices
+    R = R_x @ R_y @ R_z
+    return R
 
 
 #### CURRENT NOTES FOR IMPLEMENTATION
@@ -34,26 +123,3 @@ def __get_loss(scene, metadata_list: list) -> float:
 # # -> (R11, R12, R13), (R21, R22, R23), (R31, R32, R33) -> rotation matrix
 # # -> (Tx, Ty, Tz) -> translation vector
 # print(scene.get_im_poses())
-
-
-# camera_cs_to_world_cs = scene.get_im_poses()
-#
-# # Get the actual principal points for each camera
-# principal_points = scene.get_principal_points()
-# intrinsic_matrices = scene.get_intrinsics()
-#
-# # Iterate over each transformation matrix and corresponding principal point
-# for i, (proj_mtx, intr_mtx) in enumerate(
-#     zip(camera_cs_to_world_cs, intrinsic_matrices)
-# ):
-#     proj_mtx_cpu = proj_mtx.cpu().detach().numpy()
-#     intr_mtx_cpu = intr_mtx.cpu().detach().numpy()
-#
-#     x, y = principal_points[i].cpu().detach().numpy()
-#     camera_point = np.linalg.inv(intr_mtx_cpu) @ np.array([x, y, 5])
-#
-#     world_point = proj_mtx_cpu @ np.append(camera_point, 1)
-#
-#     world_point = world_point / world_point[3]
-#     print(f"Wold point for camera {i}: {world_point}")
-#

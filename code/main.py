@@ -91,7 +91,7 @@ def ___run_on_samples(samples: dict, args: dict):
         # scene = ___run_global_aligner(output, args)
         # matches_im0, matches_im1 = ___get_matches(scene)
         image_list = paths[i : i + window_size]
-        metadata_list = metadata[i : i + window_size]
+        metadata_list = metadata[i : min(i + window_size + 1, len(paths))]
         origin = metadata[i]["coordinate"]
         origin_lat, origin_lon, origin_alt = (
             origin["latitude"],
