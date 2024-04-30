@@ -26,6 +26,8 @@ COPY dust3r/croco/ /tmp_install/croco/
 WORKDIR /tmp_install/croco/models/curope/
 RUN python setup.py build_ext --inplace
 
+WORKDIR /
+
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

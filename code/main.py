@@ -22,6 +22,7 @@ from dust3r.viz import add_scene_cam, CAM_COLORS, OPENGL, pts3d_to_trimesh, cat_
 from dust3r.cloud_opt import global_aligner, GlobalAlignerMode
 
 from scene_loss import __get_loss
+from scene_vecs import __plot_vecs, __reproject_matrices
 
 from dl import ILoader
 
@@ -88,8 +89,10 @@ def ___run_on_samples(samples: dict, args: dict) -> dict:
 
     report = {}
 
-    for i in range(0, len(paths) - window_size):
+    mtx_buff = []
+    prev_scene_rt_matrices = None
 
+    for i in range(0, len(paths) - window_size):
         image_list = paths[i : i + window_size]
         metadata_list = metadata[i : min(i + window_size + 1, len(paths))]
         origin = metadata[i]["coordinate"]
@@ -122,11 +125,24 @@ def ___run_on_samples(samples: dict, args: dict) -> dict:
             args["reconstruct_scene"]["return_images"],
         )
         report[f"scene_{i}"] = {
-                "scene_losses": __get_loss(scene, metadata_list),
+            "scene_losses": __get_loss(scene, metadata_list),
         }
+
+        if (i + 1) % 5 == 0:
+            __plot_vecs(mtx_buff)
+            exit()
+
+        if i != 0:
+            prev_scene_rt_matrices = __reproject_matrices(
+                mtx_buff, prev_scene_rt_matrices, scene.get_im_poses()
+            )
+        else:
+            prev_scene_rt_matrices = scene.get_im_poses()
+
+        report[f"scene_{i}"]["image_list"] = image_list
         pprint(report[f"scene_{i}"])
 
-    return report 
+    return report
 
 
 def __get_reconstructed_scene(
@@ -345,7 +361,7 @@ if __name__ == "__main__":
     os.makedirs(results_dir, exist_ok=True)
     with open(f"{results_dir}/results_{curr_time}.json", "w") as f:
         json.dump(results, f)
-   
+
 
 # def ___get_matches(scene):
 #    confidence_masks = scene.get_masks()

@@ -104,6 +104,7 @@
             black
             open3d
             pyglet
+            seaborn
           ]);
 
       in {
